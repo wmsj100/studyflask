@@ -3,13 +3,13 @@
 # vim:fenc=utf-8
 #
 # Copyright © 2020  <@176a5ba06ba6>
-#
+# https://read.helloflask.com/c6-template2#zi-ding-yi-cuo-wu-ye-mian
 # Distributed under terms of the MIT license.
 
 """
 
 """
-from flask import Flask, escape, url_for, render_template
+from flask import Flask, escape, url_for, render_template, request, flash, redirect
 from flask_sqlalchemy import SQLAlchemy
 import os
 import click
@@ -17,6 +17,7 @@ import click
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////' + os.path.join(app.root_path, 'data.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = 'dev'
 db = SQLAlchemy(app)
 
 class User(db.Model):
@@ -65,12 +66,24 @@ def forge():
 
 @app.route('/')
 @app.route('/home')
-@app.route('/index')
+@app.route('/index', methods=['GET', 'POST'])
 def index():
+	if request.method == 'POST':
+		title = request.form.get('title')
+		year = request.form.get('year')
 
-	movies = Movies.query.all()
+		if not title or not year or len(year) != 4 or len(title) > 60:
+			flash('Invalid input')
+			return redirect(url_for('index'))
+		movie = Movies(title=title, year=year)
+		db.session.add(movie)
+		db.session.commit()
+		flash('Item {} Created'.format(title))
+		return redirect(url_for('index'))
+	elif request.method == 'GET':
+		movies = Movies.query.all()
+
 	return render_template('index.html', movies=movies)
-
 @app.route('/user/<user>')
 def user(user):
 	return 'User is %s' % escape(user)
@@ -91,6 +104,33 @@ def test1():
 	print(url_for('user', user='wmsj100'))
 	print(url_for('test1'))
 	return 'Test page'
+
+@app.route('/movie/edit/<int:movie_id>', methods=['GET', 'POST'])
+def edit(movie_id):
+	movie = Movies.query.get_or_404(movie_id)
+
+	if request.method == 'POST':
+		title = request.form['title']
+		year = request.form['year']
+
+		if not title or not year or len(year) != 4 or len(title) > 60:
+			flash('Invalid input')
+			return redirect(url_for('edit', movie_id=movie_id))
+
+		movie.title = title
+		movie.year = year
+		db.session.commit()
+		flash('Item update')
+		return redirect(url_for('index'))
+	return render_template('edit.html', movie=movie)
+
+@app.route('/movie/delete/<int:movie_id>', methods=['POST'])
+def delete(movie_id):
+	movie = Movies.query.get_or_404(movie_id)
+	db.session.delete(movie)
+	db.session.commit()
+	flash('Delete Item OK')
+	return redirect(url_for('index'))
 
 if __name__ == '__main__':
 	app.run(debug=True,port=80, host='0.0.0.0')
